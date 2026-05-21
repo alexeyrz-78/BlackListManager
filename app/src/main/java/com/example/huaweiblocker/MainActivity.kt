@@ -72,8 +72,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun filterAndDisplayDevices() {
-        val filtered = allDevices.filter { it.is5GHz == isCurrent5GHz }
-        deviceAdapter.updateList(filtered)
+        // Временно отключаем жесткую фильтрацию по частоте, 
+        // чтобы увидеть ПОЛНЫЙ список на любом экране!
+        deviceAdapter.updateList(allDevices)
     }
 
     private fun loadDataFromRouter() {
@@ -89,13 +90,12 @@ class MainActivity : AppCompatActivity() {
                 e.printStackTrace()
                 createMockDevices()
             } finally {
-                // Железно гарантируем, что если список пустой, мы наполним его демо-данными
                 if (allDevices.isEmpty()) {
                     createMockDevices()
                 }
                 withContext(Dispatchers.Main) {
                     filterAndDisplayDevices()
-                    Toast.makeText(this@MainActivity, "Данные обновлены (Всего: ${allDevices.size})", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Найдено устройств: ${allDevices.size}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -137,32 +137,30 @@ class MainActivity : AppCompatActivity() {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 var html = reader.use { it.readText() }
 
-                // Очищаем кодировку роутера
+                // Декодируем hex-символы роутера
                 html = html.replace("\\x2d", "-").replace("\\x3a", ":")
 
                 allDevices.clear()
 
-                // Максимально гибкий поиск MAC-адресов (любой регистр, с двоеточиями)
-                val macPattern = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}")
-                val macMatcher = macPattern.matcher(html)
+                // Сверх-гибкий поиск: выдергиваем вообще любые конструкции "Имя","какие-то данные","MAC-адрес"
+                val pattern = Pattern.compile("\"([^\"]+)\"(?:,\"[^\"]*\"){0,5},\"(([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2})\"")
+                val matcher = pattern.matcher(html)
 
-                var index = 0
-                while (macMatcher.find()) {
-                    val deviceMac = macMatcher.group()
-                    
-                    val deviceName = when (index) {
-                        0 -> "Galaxy-S21U-MRz"
-                        1 -> "Alexey-sHM5Pro"
-                        2 -> "ROG-ARz"
-                        else -> "Wi-Fi Device #$index"
-                    }
+                while (matcher.find()) {
+                    val deviceName = matcher.group(1)
+                    val deviceMac = matcher.group(2)
 
-                    val is5GHz = index % 2 == 0 
+                    // Пропускаем системные строки роутера, если они попали в парсер
+                    if (deviceName.contains("USERDevice") || deviceName.length < 2) continue
 
                     allDevices.add(
-                        Device(name = deviceName, mac = deviceMac, isBlocked = false, is5GHz = is5GHz)
+                        Device(
+                            name = deviceName,
+                            mac = deviceMac,
+                            isBlocked = false,
+                            is5GHz = isCurrent5GHz // временно делаем видимым везде
+                        )
                     )
-                    index++
                 }
             }
         } catch (e: Exception) {
@@ -172,7 +170,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun createMockDevices() {
         allDevices.clear()
-        // Твои реальные устройства, которые мы нашли в логах роутера
         allDevices.add(Device("Galaxy-S21U-MRz", "5a:73:4a:27:83:1c", false, true))
         allDevices.add(Device("Alexey-sHM5Pro", "b2:51:a7:f4:c5:92", false, false))
         allDevices.add(Device("ROG-ARz", "8c:b8:7e:28:45:c4", false, true))
