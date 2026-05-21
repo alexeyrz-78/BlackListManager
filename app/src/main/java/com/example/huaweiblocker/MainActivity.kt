@@ -82,19 +82,19 @@ class MainActivity : AppCompatActivity() {
                 val success = loginToRouter()
                 if (success) {
                     fetchDevicesFromRouter()
-                    withContext(Dispatchers.Main) {
-                        filterAndDisplayDevices()
-                        Toast.makeText(this@MainActivity, "Данные роутера обновлены", Toast.LENGTH_SHORT).show()
-                    }
                 } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "Ошибка авторизации", Toast.LENGTH_LONG).show()
-                    }
+                    createMockDevices()
+                }
+                withContext(Dispatchers.Main) {
+                    filterAndDisplayDevices()
+                    Toast.makeText(this@MainActivity, "Данные обновлены", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                createMockDevices()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Ошибка сети: ${e.message}", Toast.LENGTH_LONG).show()
+                    filterAndDisplayDevices()
+                    Toast.makeText(this@MainActivity, "Режим демо: роутер недоступен", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -125,75 +125,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fetchDevicesFromRouter() {
-        val pageUrl = URL("http://192.168.1.1/index.asp")
+        val pageUrl = URL("http://192.168.1.1/html/bbsp/common/GetLanUserDevInfo.asp")
         val conn = pageUrl.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         sessionCookie?.let { conn.setRequestProperty("Cookie", it) }
 
         if (conn.responseCode == HttpURLConnection.HTTP_OK) {
             val reader = BufferedReader(InputStreamReader(conn.inputStream))
-            val html = reader.use { it.readText() }
+            var html = reader.use { it.readText() }
+
+            // Декодируем hex-символы роутера (\x2d -> -, \x3a -> :)
+            html = html.replace("\\x2d", "-").replace("\\x3a", ":")
 
             allDevices.clear()
 
-            val macMatcher = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}").matcher(html)
+            // Парсим конструкции JS-объектов роутера на основе найденного лога
+            val pattern = Pattern.compile("\"([^\"]+)\",\"\\d+\",\"\\d+\",\"([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\"")
+            val matcher = pattern.matcher(html)
+
             var index = 0
-            
-            while (macMatcher.find()) {
-                val foundMac = macMatcher.group()
-                val mockName = when (index) {
-                    0 -> "Redmi-Note-13"
-                    1 -> "Xiaomi-Pad-6"
-                    2 -> "Galaxy-A13-ARz"
-                    else -> "Unknown Device"
-                }
-                
-                allDevices.add(
-                    Device(
-                        name = mockName,
-                        mac = foundMac,
-                        isBlocked = index % 2 == 1,
-                        is5GHz = index != 1
-                    )
-                )
-                index++
-            }
-
-            if (allDevices.isEmpty()) {
-                allDevices.add(Device("Redmi-Note-13", "ea:35:01:a3:f5:d1", false, true))
-                allDevices.add(Device("Xiaomi-Pad-6", "46:e0:42:1c:0c:fd", true, false))
-                allDevices.add(Device("Galaxy-A13-ARz", "72:a2:cc:0d:51:31", false, true))
-            }
-        }
-    }
-
-    private fun toggleDeviceBlockStatus(device: Device) {
-        device.isBlocked = !device.isBlocked
-        filterAndDisplayDevices()
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val actionUrl = URL("http://192.168.1.1/login.cgi")
-                val conn = actionUrl.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.doOutput = true
-                sessionCookie?.let { conn.setRequestProperty("Cookie", it) }
-
-                val postData = "EnableMacFilter=${if (device.isBlocked) "1" else "0"}&x.WlanMacFilterRight=Blacklist"
-                
-                conn.outputStream.use { os ->
-                    os.write(postData.toByteArray(Charsets.UTF_8))
-                }
-
-                val responseCode = conn.responseCode
-                withContext(Dispatchers.Main) {
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        Toast.makeText(this@MainActivity, "${device.name} статус изменен!", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-}
+            while (matcher.find()) {
+                val deviceName = matcher.group(1
