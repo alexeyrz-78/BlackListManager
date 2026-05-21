@@ -1,1 +1,9 @@
-
+<resources>
+    <style name="Theme.HuaweiBlacklistController" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#29B6F6</item>
+        <item name="colorPrimaryVariant">#121212</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:windowBackground">#121212</item>
+    </style>
+</resources>
