@@ -19,11 +19,9 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Grant Execute Permission for Gradlew
-      run: chmod +x gradlew
-      continue-on-error: true
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
 
     - name: Build APK
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug
