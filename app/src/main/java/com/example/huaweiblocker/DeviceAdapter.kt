@@ -1,7 +1,5 @@
 package com.example.huaweiblocker
-
 import com.example.huaweiblocker.R
-
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
