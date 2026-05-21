@@ -1,4 +1,5 @@
 package com.example.huaweiblocker
+
 import com.example.huaweiblocker.R
 import android.graphics.Color
 import android.os.Bundle
@@ -24,31 +25,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btn5GHz: Button
     private lateinit var btn24GHz: Button
 
-    // Списки устройств для разных частот
     private var allDevices = mutableListOf<Device>()
     private var isCurrent5GHz = true
-
-    // Сессионные данные роутера
     private var sessionCookie: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Инициализируем элементы интерфейса
         rvDevices = findViewById(R.id.rvDevices)
         btn5GHz = findViewById(R.id.btn5GHz)
         btn24GHz = findViewById(R.id.btn24GHz)
 
         rvDevices.layoutManager = LinearLayoutManager(this)
 
-        // Настраиваем адаптер списка девайсов (строгая передача лямбды внутри круглых скобок)
         deviceAdapter = DeviceAdapter(emptyList(), { selectedDevice ->
             toggleDeviceBlockStatus(selectedDevice)
         })
         rvDevices.adapter = deviceAdapter
 
-        // Переключатели частот (вкладки)
         btn5GHz.setOnClickListener {
             switchFrequency(true)
         }
@@ -57,7 +52,6 @@ class MainActivity : AppCompatActivity() {
             switchFrequency(false)
         }
 
-        // Запускаем сетевой процесс в фоновом потоке
         loadDataFromRouter()
     }
 
@@ -74,7 +68,6 @@ class MainActivity : AppCompatActivity() {
             btn5GHz.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#2C2C2C")))
             btn5GHz.setTextColor(Color.parseColor("#888888"))
         }
-        // Обновляем список на экране под выбранную частоту
         filterAndDisplayDevices()
     }
 
@@ -86,12 +79,9 @@ class MainActivity : AppCompatActivity() {
     private fun loadDataFromRouter() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 1. Авторизация на роутере (на основе твоего HAR-лога)
                 val success = loginToRouter()
                 if (success) {
-                    // 2. Загрузка страницы фильтрации и парсинг девайсов
                     fetchDevicesFromRouter()
-                    
                     withContext(Dispatchers.Main) {
                         filterAndDisplayDevices()
                         Toast.makeText(this@MainActivity, "Данные роутера обновлены", Toast.LENGTH_SHORT).show()
@@ -110,7 +100,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Логика входа на роутер через системные HTTP-запросы
     private fun loginToRouter(): Boolean {
         val loginUrl = URL("http://192.168.1.1/login.cgi")
         val conn = loginUrl.openConnection() as HttpURLConnection
@@ -118,7 +107,6 @@ class MainActivity : AppCompatActivity() {
         conn.doOutput = true
         conn.connectTimeout = 5000
 
-        // Данные формы авторизации из твоего HAR-лога
         val postData = "UserName=telekom&PassWord=dGVsZWtvbQ%3D%3D&Language=english"
         
         conn.outputStream.use { os ->
@@ -136,7 +124,6 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
-    // Чтение страницы фильтрации и разбор таблицы устройств
     private fun fetchDevicesFromRouter() {
         val pageUrl = URL("http://192.168.1.1/index.asp")
         val conn = pageUrl.openConnection() as HttpURLConnection
@@ -149,7 +136,6 @@ class MainActivity : AppCompatActivity() {
 
             allDevices.clear()
 
-            // Парсер для поиска MAC-адресов в коде страницы роутера
             val macMatcher = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}").matcher(html)
             var index = 0
             
@@ -173,7 +159,6 @@ class MainActivity : AppCompatActivity() {
                 index++
             }
 
-            // Если роутер вернул пустой список (например, в режиме теста), создаем девайсы из макета
             if (allDevices.isEmpty()) {
                 allDevices.add(Device("Redmi-Note-13", "ea:35:01:a3:f5:d1", false, true))
                 allDevices.add(Device("Xiaomi-Pad-6", "46:e0:42:1c:0c:fd", true, false))
@@ -182,7 +167,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Действие при нажатии кнопки Block / Allow в списке
     private fun toggleDeviceBlockStatus(device: Device) {
         device.isBlocked = !device.isBlocked
         filterAndDisplayDevices()
@@ -195,7 +179,6 @@ class MainActivity : AppCompatActivity() {
                 conn.doOutput = true
                 sessionCookie?.let { conn.setRequestProperty("Cookie", it) }
 
-                // POST-запрос с ID чекбокса "EnableMacFilter", который мы нашли в коде роутера
                 val postData = "EnableMacFilter=${if (device.isBlocked) "1" else "0"}&x.WlanMacFilterRight=Blacklist"
                 
                 conn.outputStream.use { os ->
@@ -208,3 +191,9 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "${device.name} статус изменен!", Toast.LENGTH_SHORT).show()
                     }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
