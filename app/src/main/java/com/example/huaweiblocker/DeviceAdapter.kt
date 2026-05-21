@@ -10,7 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 
 class DeviceAdapter(
     private var devices: List<Device>,
-    private val onBlockClick: (Device) -> Unit
+    private val onBlockClick: (Device) -> Unit // Вот здесь мы исправили тип клика!
 ) : RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder>() {
 
     class DeviceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -30,7 +30,7 @@ class DeviceAdapter(
         holder.tvName.text = device.name
         holder.tvMac.text = device.mac
 
-        // Стилизуем кнопку под текущий статус, как на твоем макете
+        // Стилизуем кнопку под текущий статус
         if (device.isBlocked) {
             holder.btnAction.text = "Allow"
             holder.btnAction.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E57373")) // Красный
@@ -41,7 +41,7 @@ class DeviceAdapter(
 
         // Обработка нажатия на кнопку
         holder.btnAction.setOnClickListener {
-            onBlockClick(device)
+            onBlockClick(device) // Передаем конкретный девайс, по которому кликнули
         }
     }
 
