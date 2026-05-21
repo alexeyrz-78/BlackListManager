@@ -4,7 +4,6 @@ plugins {
 }
 
 android {
-    // Тот самый namespace, который свяжет код с буквой R
     namespace 'com.example.huaweiblocker'
     compileSdk 34
 
