@@ -72,8 +72,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun filterAndDisplayDevices() {
-        // Временно отключаем жесткую фильтрацию по частоте, 
-        // чтобы увидеть ПОЛНЫЙ список на любом экране!
+        // Показываем ВСЕ устройства на любой вкладке, пока отлаживаем парсер
         deviceAdapter.updateList(allDevices)
     }
 
@@ -95,7 +94,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 withContext(Dispatchers.Main) {
                     filterAndDisplayDevices()
-                    Toast.makeText(this@MainActivity, "Найдено устройств: ${allDevices.size}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Устройств в сети: ${allDevices.size}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -137,30 +136,53 @@ class MainActivity : AppCompatActivity() {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 var html = reader.use { it.readText() }
 
-                // Декодируем hex-символы роутера
+                // Полностью избавляемся от специфического hex-кодирования МТС роутера
                 html = html.replace("\\x2d", "-").replace("\\x3a", ":")
 
                 allDevices.clear()
 
-                // Сверх-гибкий поиск: выдергиваем вообще любые конструкции "Имя","какие-то данные","MAC-адрес"
-                val pattern = Pattern.compile("\"([^\"]+)\"(?:,\"[^\"]*\"){0,5},\"(([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2})\"")
-                val matcher = pattern.matcher(html)
+                // Ищем конструкцию: "ИмяУстройства" , ... куча всего ... , "MAC-адрес"
+                // Это регулярное выражение вытащит данные, как бы роутер их ни форматировал
+                val strictPattern = Pattern.compile("\"([^\"]+)\"[^\\x00]*?\"(([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2})\"")
+                val matcher = strictPattern.matcher(html)
 
                 while (matcher.find()) {
-                    val deviceName = matcher.group(1)
+                    val nameCandidate = matcher.group(1)
                     val deviceMac = matcher.group(2)
 
-                    // Пропускаем системные строки роутера, если они попали в парсер
-                    if (deviceName.contains("USERDevice") || deviceName.length < 2) continue
+                    // Отсекаем мусорные технические строки прошивки
+                    if (nameCandidate.contains("USERDevice") || 
+                        nameCandidate.contains("WIFI") || 
+                        nameCandidate.length < 2) continue
 
                     allDevices.add(
                         Device(
-                            name = deviceName,
+                            name = nameCandidate,
                             mac = deviceMac,
                             isBlocked = false,
-                            is5GHz = isCurrent5GHz // временно делаем видимым везде
+                            is5GHz = isCurrent5GHz
                         )
                     )
+                }
+
+                // Вторая линия обороны: если хитрый паттерн выше дал сбой, 
+                // мы просто соберем все MAC-адреса «голышом» и подпишем их номерами
+                if (allDevices.isEmpty()) {
+                    val simpleMacPattern = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}")
+                    val simpleMatcher = simpleMacPattern.matcher(html)
+                    var index = 1
+                    while (simpleMatcher.find()) {
+                        val mac = simpleMatcher.group()
+                        allDevices.add(
+                            Device(
+                                name = "Device #$index",
+                                mac = mac,
+                                isBlocked = false,
+                                is5GHz = isCurrent5GHz
+                            )
+                        )
+                        index++
+                    }
                 }
             }
         } catch (e: Exception) {
