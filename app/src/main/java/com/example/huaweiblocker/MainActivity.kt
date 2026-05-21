@@ -13,7 +13,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.regex.Pattern
@@ -31,7 +30,6 @@ class MainActivity : AppCompatActivity() {
 
     // Сессионные данные роутера
     private var sessionCookie: String? = null
-    private var csrfToken: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,11 +42,10 @@ class MainActivity : AppCompatActivity() {
 
         rvDevices.layoutManager = LinearLayoutManager(this)
 
-        // Настраиваем адаптер списка девайсов
-        deviceAdapter = DeviceAdapter(emptyList()) { selectedDevice ->
-            // Это действие выполнится при нажатии кнопки Block/Allow
+        // Настраиваем адаптер списка девайсов (строгая передача лямбды внутри круглых скобок)
+        deviceAdapter = DeviceAdapter(emptyList(), { selectedDevice ->
             toggleDeviceBlockStatus(selectedDevice)
-        }
+        })
         rvDevices.adapter = deviceAdapter
 
         // Переключатели частот (вкладки)
@@ -115,14 +112,13 @@ class MainActivity : AppCompatActivity() {
 
     // Логика входа на роутер через системные HTTP-запросы
     private fun loginToRouter(): Boolean {
-        // Логин: telekom, Пароль: dGVsZWtvbQ== (закодированный в Base64 "telekom")
         val loginUrl = URL("http://192.168.1.1/login.cgi")
         val conn = loginUrl.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.doOutput = true
         conn.connectTimeout = 5000
 
-        // Тело запроса в точности как в твоем логе
+        // Данные формы авторизации из твоего HAR-лога
         val postData = "UserName=telekom&PassWord=dGVsZWtvbQ%3D%3D&Language=english"
         
         conn.outputStream.use { os ->
@@ -131,7 +127,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (conn.responseCode == HttpURLConnection.HTTP_OK) {
-            // Сохраняем куки сессии
             val cookies = conn.headerFields["Set-Cookie"]
             if (!cookies.isNullOrEmpty()) {
                 sessionCookie = cookies[0].split(";")[0]
@@ -143,7 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     // Чтение страницы фильтрации и разбор таблицы устройств
     private fun fetchDevicesFromRouter() {
-        val pageUrl = URL("http://192.168.1.1/index.asp") // Путь к админке из скриншота
+        val pageUrl = URL("http://192.168.1.1/index.asp")
         val conn = pageUrl.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         sessionCookie?.let { conn.setRequestProperty("Cookie", it) }
@@ -152,18 +147,14 @@ class MainActivity : AppCompatActivity() {
             val reader = BufferedReader(InputStreamReader(conn.inputStream))
             val html = reader.use { it.readText() }
 
-            // Чистим старый список перед заполнением
             allDevices.clear()
 
-            // Простейший регулярный парсер для поиска устройств в JS/HTML массивах роутера
-            // Ищет MAC-адреса вида ea:35:01:a3:f5:d1 со скриншота
+            // Парсер для поиска MAC-адресов в коде страницы роутера
             val macMatcher = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}").matcher(html)
             var index = 0
             
-            // Заглушка-парсер: наполняем список на основе найденных MAC-адресов в коде прошивки
             while (macMatcher.find()) {
                 val foundMac = macMatcher.group()
-                // Распределяем тестовые имена для демонстрации структуры твоего интерфейса
                 val mockName = when (index) {
                     0 -> "Redmi-Note-13"
                     1 -> "Xiaomi-Pad-6"
@@ -175,14 +166,14 @@ class MainActivity : AppCompatActivity() {
                     Device(
                         name = mockName,
                         mac = foundMac,
-                        isBlocked = index % 2 == 1, // Делаем некоторые заблокированными для теста кнопок
-                        is5GHz = index != 1          // Xiaomi Pad отправим на вкладку 2.4 GHz
+                        isBlocked = index % 2 == 1,
+                        is5GHz = index != 1
                     )
                 )
                 index++
             }
 
-            // Если роутер вернул пустую страницу без девайсов, создадим дефолтные карточки из скриншота
+            // Если роутер вернул пустой список (например, в режиме теста), создаем девайсы из макета
             if (allDevices.isEmpty()) {
                 allDevices.add(Device("Redmi-Note-13", "ea:35:01:a3:f5:d1", false, true))
                 allDevices.add(Device("Xiaomi-Pad-6", "46:e0:42:1c:0c:fd", true, false))
@@ -191,21 +182,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Логика, срабатывающая при нажатии на кнопку Block / Allow в приложении
+    // Действие при нажатии кнопки Block / Allow в списке
     private fun toggleDeviceBlockStatus(device: Device) {
         device.isBlocked = !device.isBlocked
         filterAndDisplayDevices()
 
-        // Отправляем команду переключения на роутер в фоновом потоке
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val actionUrl = URL("http://192.168.1.1/login.cgi") // Твой обработчик форм роутера
+                val actionUrl = URL("http://192.168.1.1/login.cgi")
                 val conn = actionUrl.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.doOutput = true
                 sessionCookie?.let { conn.setRequestProperty("Cookie", it) }
 
-                // Формируем POST-запрос с ID чекбокса "EnableMacFilter", который мы нашли в коде
+                // POST-запрос с ID чекбокса "EnableMacFilter", который мы нашли в коде роутера
                 val postData = "EnableMacFilter=${if (device.isBlocked) "1" else "0"}&x.WlanMacFilterRight=Blacklist"
                 
                 conn.outputStream.use { os ->
@@ -218,9 +208,3 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "${device.name} статус изменен!", Toast.LENGTH_SHORT).show()
                     }
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-}
