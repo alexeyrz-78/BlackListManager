@@ -45,9 +45,9 @@ class MainActivity : AppCompatActivity() {
         rvDevices.layoutManager = LinearLayoutManager(this)
 
         // Настраиваем адаптер списка девайсов
-        deviceAdapter = DeviceAdapter(emptyList()) { device ->
+        deviceAdapter = DeviceAdapter(emptyList()) { selectedDevice ->
             // Это действие выполнится при нажатии кнопки Block/Allow
-            toggleDeviceBlockStatus(device)
+            toggleDeviceBlockStatus(selectedDevice)
         }
         rvDevices.adapter = deviceAdapter
 
